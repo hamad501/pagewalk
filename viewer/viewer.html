@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pagewalk Guide</title>
+  <link rel="stylesheet" href="../assets/styles/shared.css">
+  <link rel="stylesheet" href="viewer.css">
+</head>
+<body class="vw-body">
+
+  <!-- Top bar ─────────────────────────────────────────────── -->
+  <header class="vw-topbar">
+    <a href="#" class="vw-back" id="back-btn" title="Dashboard">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15l-5-5 5-5"/></svg>
+    </a>
+    <div class="vw-logo-mark">PW</div>
+    <h1 class="vw-guide-title" id="guide-title" contenteditable="true" spellcheck="false">Loading…</h1>
+
+    <!-- Mode toggle (read / edit) -->
+    <div class="vw-mode-toggle" id="mode-toggle">
+      <button class="vw-mode-opt active" data-mode="read">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 10s3.5-7 9-7 9 7 9 7-3.5 7-9 7-9-7-9-7z"/><circle cx="10" cy="10" r="2.5"/></svg>
+        Read
+      </button>
+      <button class="vw-mode-opt" data-mode="edit">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3l4 4-9 9H4v-4z"/></svg>
+        Edit
+      </button>
+    </div>
+
+    <div class="vw-topbar-actions">
+      <button class="vw-history-btn" id="history-btn" title="View and restore previous versions">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><polyline points="10,6 10,10 13,12"/></svg>
+        History
+      </button>
+      <button class="vw-guide-me-btn" id="guide-me-btn" title="Launch an interactive walkthrough on the original page">
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3.5l12 6.5-12 6.5V3.5z"/></svg>
+        Guide Me
+      </button>
+      <div class="vw-share-wrap">
+        <button class="vw-share-btn" id="share-btn">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v4a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-4"/><polyline points="14,6 10,2 6,6"/><line x1="10" y1="2" x2="10" y2="14"/></svg>
+          Share
+        </button>
+        <div class="vw-share-menu" id="share-menu">
+          <button class="vw-share-item" data-fmt="pdf">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6z"/><polyline points="13,2 13,6 17,6"/></svg>
+            Export as PDF
+          </button>
+          <button class="vw-share-item" data-fmt="html">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5,7 2,10 5,13"/><polyline points="15,7 18,10 15,13"/><line x1="12" y1="4" x2="8" y2="16"/></svg>
+            Export as HTML
+          </button>
+          <button class="vw-share-item" data-fmt="markdown">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="16" height="12" rx="2"/><path d="M5 12V8l2 2 2-2v4M13 8v4M11 11l2 2 2-2"/></svg>
+            Export as Markdown
+          </button>
+          <button class="vw-share-item" data-fmt="copy">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="11" height="11" rx="1.5"/><path d="M4 13V4a1 1 0 0 1 1-1h9"/></svg>
+            Copy as text
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main layout ─────────────────────────────────────────── -->
+  <div class="vw-layout">
+
+    <!-- Sidebar -->
+    <aside class="vw-sidebar" id="sidebar">
+      <div class="vw-sidebar-head">
+        <span class="vw-sidebar-title">Steps</span>
+        <span class="vw-sidebar-count" id="sidebar-count">0</span>
+      </div>
+      <ol class="vw-steps-nav" id="steps-nav"></ol>
+    </aside>
+
+    <!-- Scrollable content -->
+    <main class="vw-content" id="content">
+      <div class="vw-hero">
+        <h2 class="vw-hero-title" id="hero-title">Loading…</h2>
+        <div class="vw-hero-desc" id="hero-desc"></div>
+        <div class="vw-hero-meta" id="hero-meta"></div>
+      </div>
+
+      <div class="vw-steps" id="steps-wrap">
+        <!-- Step cards injected here -->
+      </div>
+
+      <footer class="vw-footer">
+        <div class="vw-footer-brand">
+          <div class="vw-footer-logo">PW</div>
+          <div>
+            <div class="vw-footer-name">Made with Pagewalk</div>
+            <div class="vw-footer-tagline">100% private. Stored on your device.</div>
+          </div>
+        </div>
+      </footer>
+    </main>
+  </div>
+
+  <div class="vw-toast" id="toast"></div>
+
+  <!-- Hidden file input for manual step image upload -->
+  <input type="file" id="vw-img-upload-input" accept="image/*" style="display:none">
+
+  <!-- Lightbox -->
+  <div class="vw-lightbox" id="vw-lightbox" hidden>
+    <div class="vw-lightbox-stage" id="vw-lightbox-stage">
+      <div class="vw-lightbox-img-wrap" id="vw-lightbox-img-wrap">
+        <img class="vw-lightbox-img" id="vw-lightbox-img" alt="Full screenshot">
+        <div class="vw-lb-caption" id="vw-lb-caption" hidden>
+          <div class="vw-lb-caption-head">
+            <span class="vw-lb-badge" id="vw-lb-badge">Step 1</span>
+            <span class="vw-lb-type" id="vw-lb-type"></span>
+          </div>
+          <div class="vw-lb-title" id="vw-lb-title"></div>
+          <div class="vw-lb-notes" id="vw-lb-notes" hidden></div>
+        </div>
+      </div>
+    </div>
+    <button class="vw-lb-nav vw-lb-nav-prev" id="vw-lb-prev" aria-label="Previous" hidden>
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="12,4 6,10 12,16"/></svg>
+    </button>
+    <button class="vw-lb-nav vw-lb-nav-next" id="vw-lb-next" aria-label="Next" hidden>
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8,4 14,10 8,16"/></svg>
+    </button>
+    <button class="vw-lightbox-close" id="vw-lightbox-close" aria-label="Close">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="4" x2="16" y2="16"/><line x1="16" y1="4" x2="4" y2="16"/></svg>
+    </button>
+  </div>
+
+  <!-- Version History modal -->
+  <div class="vw-history-overlay" id="vw-history-overlay" hidden>
+    <div class="vw-history-modal" role="dialog" aria-modal="true" aria-labelledby="vw-history-title">
+      <div class="vw-history-header">
+        <h2 class="vw-history-title" id="vw-history-title">Version History</h2>
+        <button class="vw-history-close" id="vw-history-close" aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="4" x2="16" y2="16"/><line x1="16" y1="4" x2="4" y2="16"/></svg>
+        </button>
+      </div>
+      <p class="vw-history-hint" id="vw-history-hint">A snapshot is saved automatically when you enter Edit mode. Up to 5 versions are kept per guide.</p>
+      <div class="vw-history-body">
+        <div class="vw-history-list" id="vw-history-list">
+          <div class="vw-history-empty" id="vw-history-empty">No saved versions yet. Enter Edit mode to create your first snapshot.</div>
+        </div>
+        <div class="vw-history-preview" id="vw-history-preview">
+          <div class="vw-history-preview-empty" id="vw-history-preview-empty">
+            <svg width="36" height="36" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7.5"/><polyline points="10,6 10,10 13,12"/></svg>
+            <span>Select a version to preview its steps</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fabric.js is needed for inline annotation editing (edit mode) -->
+  <script src="../lib/vendor/fabric.min.js"></script>
+  <script src="../lib/vendor/Sortable.min.js"></script>
+
+  <script type="module" src="viewer.js"></script>
+</body>
+</html>

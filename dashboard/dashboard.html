@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pagewalk — Guides</title>
+  <link rel="stylesheet" href="../assets/styles/shared.css">
+  <link rel="stylesheet" href="../assets/styles/dashboard.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <a href="#" class="topbar-logo" id="logo-link">
+      <div class="logo-mark">PW</div>
+      <span class="logo-text">Pagewalk</span>
+    </a>
+    <div class="topbar-actions">
+      <span class="storage-info" id="storage-info"></span>
+      <button class="btn-ghost" id="settings-btn" style="font-size:13px">⚙ Settings</button>
+      <button class="btn-ghost" id="new-guide-btn" style="font-size:13px">+ New Recording</button>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- ── Guides view ──────────────────────────────────────────────────── -->
+    <div id="guides-view">
+      <div class="section-header">
+        <h1 class="section-title">
+          My Guides
+          <span class="guide-count" id="guide-count"></span>
+        </h1>
+        <div class="search-controls">
+          <input type="search" id="search-input" class="search-input" placeholder="Search guides…" autocomplete="off">
+          <select id="sort-select" class="sort-select" title="Sort order">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="az">A → Z</option>
+            <option value="za">Z → A</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="tag-filter-bar" class="tag-filter-bar" style="display:none">
+        Filtered by tag:
+        <span id="tag-filter-label" class="tag-chip tag-active"></span>
+        <button id="tag-filter-clear" class="btn-ghost" style="font-size:12px;padding:3px 8px">Clear ×</button>
+      </div>
+
+      <div class="guides-grid" id="guides-grid">
+        <!-- Skeleton loaders -->
+        <div class="skeleton-card">
+          <div class="skeleton skeleton-thumb"></div>
+          <div class="skeleton-body">
+            <div class="skeleton skeleton-line-title"></div>
+            <div class="skeleton skeleton-line-meta"></div>
+          </div>
+        </div>
+        <div class="skeleton-card">
+          <div class="skeleton skeleton-thumb"></div>
+          <div class="skeleton-body">
+            <div class="skeleton skeleton-line-title"></div>
+            <div class="skeleton skeleton-line-meta"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Settings view ────────────────────────────────────────────────── -->
+    <div id="settings-view" style="display:none">
+      <div class="section-header" style="margin-bottom:24px">
+        <h1 class="section-title">Settings</h1>
+      </div>
+      <div id="settings-view-inner">
+
+        <div class="sp-section sp-card">
+          <div class="sp-section-title">Recording</div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Screenshot delay</span>
+              <span class="sp-row-desc">Wait after a click before capturing (ms)</span>
+            </div>
+            <div class="sp-row-ctrl">
+              <input type="range" id="sp-delay" min="0" max="2000" step="50">
+              <span class="sp-value" id="sp-delay-val">300ms</span>
+            </div>
+          </div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">JPEG quality</span>
+              <span class="sp-row-desc">Higher = sharper screenshots, larger storage</span>
+            </div>
+            <div class="sp-row-ctrl">
+              <input type="range" id="sp-quality" min="20" max="100" step="5">
+              <span class="sp-value" id="sp-quality-val">85%</span>
+            </div>
+          </div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Capture on start</span>
+              <span class="sp-row-desc">Take a screenshot of the current page the moment recording begins</span>
+            </div>
+            <label class="sp-toggle">
+              <input type="checkbox" id="sp-capture-on-start">
+              <span class="sp-toggle-track"></span>
+            </label>
+          </div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Show recording widget</span>
+              <span class="sp-row-desc">Display the floating control widget on the page while recording</span>
+            </div>
+            <label class="sp-toggle">
+              <input type="checkbox" id="sp-show-widget">
+              <span class="sp-toggle-track"></span>
+            </label>
+          </div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Auto-redact sensitive data</span>
+              <span class="sp-row-desc">Mask emails, phone numbers, credit cards in screenshots</span>
+            </div>
+            <label class="sp-toggle">
+              <input type="checkbox" id="sp-auto-redact">
+              <span class="sp-toggle-track"></span>
+            </label>
+          </div>
+          <div id="sp-redact-options" style="display:none">
+            <div class="sp-redact-sub" style="align-items:flex-start">
+              <div class="sp-redact-sub-info">
+                <span class="sp-redact-sub-label">Detect categories</span>
+                <span class="sp-redact-sub-desc">Which types of sensitive data to mask automatically</span>
+              </div>
+              <div class="sp-cat-grid">
+                <label class="sp-cat-row"><input type="checkbox" id="sp-cat-emails"> Emails</label>
+                <label class="sp-cat-row"><input type="checkbox" id="sp-cat-phones"> Phone numbers</label>
+                <label class="sp-cat-row"><input type="checkbox" id="sp-cat-cards"> Credit cards</label>
+                <label class="sp-cat-row"><input type="checkbox" id="sp-cat-ssn"> SSNs / IDs</label>
+                <label class="sp-cat-row"><input type="checkbox" id="sp-cat-money"> Money amounts</label>
+                <label class="sp-cat-row"><input type="checkbox" id="sp-cat-form-fields"> All form fields</label>
+                <label class="sp-cat-row"><input type="checkbox" id="sp-cat-table-data"> Table data</label>
+              </div>
+            </div>
+            <div class="sp-redact-sub" style="flex-direction:column;align-items:stretch;gap:10px">
+              <div class="sp-redact-sub-info">
+                <span class="sp-redact-sub-label">Custom patterns</span>
+                <span class="sp-redact-sub-desc">Regex patterns — each match will be masked on capture</span>
+              </div>
+              <div id="sp-custom-pattern-list" class="sp-pattern-list"></div>
+              <button class="btn-ghost" id="sp-add-pattern-btn" style="align-self:flex-start;font-size:12px;padding:4px 10px">+ Add pattern</button>
+            </div>
+            <div class="sp-redact-sub">
+              <div class="sp-redact-sub-info">
+                <span class="sp-redact-sub-label">Redaction style</span>
+                <span class="sp-redact-sub-desc">How sensitive data appears in screenshots</span>
+              </div>
+              <select id="sp-redact-style" style="font-size:13px;padding:5px 8px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-bg);color:var(--color-text)">
+                <option value="redact">Black blocks (████)</option>
+                <option value="blur">Blur</option>
+              </select>
+            </div>
+            <div class="sp-redact-sub">
+              <div class="sp-redact-sub-info">
+                <span class="sp-redact-sub-label">Redaction timing</span>
+                <span class="sp-redact-sub-desc">When masking is active on the page</span>
+              </div>
+              <select id="sp-redact-mode" style="font-size:13px;padding:5px 8px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-bg);color:var(--color-text)">
+                <option value="capture">On capture only</option>
+                <option value="persistent">Entire recording session</option>
+              </select>
+            </div>
+          </div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Default guide title</span>
+              <span class="sp-row-desc">Template for new recordings. Tokens: <code>{host}</code> <code>{title}</code> <code>{date}</code> <code>{time}</code></span>
+            </div>
+            <input type="text" id="sp-title-template" class="sp-color-hex" style="width:220px"
+                   placeholder="Guide — {host}" maxlength="120" spellcheck="false">
+          </div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Versions per guide</span>
+              <span class="sp-row-desc">Max history snapshots kept per guide (1 – 50)</span>
+            </div>
+            <div class="sp-row-ctrl">
+              <input type="number" id="sp-max-versions" min="1" max="50" value="5"
+                     style="width:64px;font-size:13px;padding:5px 8px;border:1px solid var(--color-border);border-radius:6px;background:var(--color-bg);color:var(--color-text);text-align:center">
+            </div>
+          </div>
+          <div class="sp-save-row">
+            <button class="btn-primary" id="sp-save-btn" style="font-size:13px">Save Settings</button>
+          </div>
+        </div>
+
+        <div class="sp-section sp-card">
+          <div class="sp-section-title">Storage</div>
+          <div class="sp-storage" id="sp-storage">Loading…</div>
+        </div>
+
+        <div class="sp-section sp-card">
+          <div class="sp-section-title">Backup</div>
+          <p style="font-size:12px;color:var(--color-text-muted);margin-bottom:12px">
+            Export all your guides and settings to a file, or restore from a previous backup.
+          </p>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Export backup</span>
+              <span class="sp-row-desc">Download all guides, screenshots, and settings as a JSON file</span>
+            </div>
+            <button class="btn-ghost" id="sp-export-btn" style="font-size:12px;white-space:nowrap;flex-shrink:0">Export</button>
+          </div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Import backup</span>
+              <span class="sp-row-desc">Add guides from a backup file — existing guides are kept</span>
+            </div>
+            <button class="btn-ghost" id="sp-import-btn" style="font-size:12px;white-space:nowrap;flex-shrink:0">Import</button>
+            <input type="file" id="sp-import-input" accept=".json,application/json" style="display:none">
+          </div>
+        </div>
+
+        <div class="sp-section sp-card">
+          <div class="sp-section-title">Branding</div>
+          <p style="font-size:12px;color:var(--color-text-muted);margin-bottom:12px">
+            Customise how your guides look in PDF and HTML exports.
+          </p>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Primary color</span>
+              <span class="sp-row-desc">Accents in exports</span>
+            </div>
+            <div class="sp-row-ctrl">
+              <div class="sp-color-wrap">
+                <button class="sp-color-swatch" id="sp-color-swatch"></button>
+                <input type="color" id="sp-color-picker" value="#5D2E8C">
+              </div>
+              <input type="text" id="sp-color-hex" class="sp-color-hex" value="#5D2E8C" maxlength="7" spellcheck="false">
+            </div>
+          </div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Brand name</span>
+              <span class="sp-row-desc">Shown in export headers and footers</span>
+            </div>
+            <input type="text" id="sp-brand-name" class="sp-color-hex" style="width:160px" placeholder="Pagewalk" maxlength="40">
+          </div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Logo mark</span>
+              <span class="sp-row-desc">Text badge fallback when no image is set</span>
+            </div>
+            <input type="text" id="sp-logo-mark" class="sp-color-hex" style="width:64px;text-transform:uppercase" placeholder="PW" maxlength="4">
+          </div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Logo image</span>
+              <span class="sp-row-desc">PNG or JPEG, replaces text badge in exports</span>
+            </div>
+            <div class="sp-row-ctrl" style="gap:8px">
+              <div class="sp-logo-preview" id="sp-logo-preview">none</div>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <button class="btn-ghost" id="sp-logo-upload-btn" style="font-size:11px;padding:4px 8px">Upload</button>
+                <button class="btn-ghost" id="sp-logo-remove-btn" style="font-size:11px;padding:4px 8px;color:var(--color-danger);display:none">Remove</button>
+              </div>
+              <input type="file" id="sp-logo-file-input" accept="image/*" style="display:none">
+            </div>
+          </div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Tagline</span>
+              <span class="sp-row-desc">Short line shown below your brand name in exports</span>
+            </div>
+            <input type="text" id="sp-tagline" class="sp-color-hex" style="width:200px" placeholder="Private guide recorder" maxlength="60">
+          </div>
+          <div class="sp-save-row">
+            <button class="btn-primary" id="sp-save-branding-btn" style="font-size:13px">Save Branding</button>
+          </div>
+        </div>
+
+        <div class="sp-section sp-card sp-danger">
+          <div class="sp-section-title">Danger Zone</div>
+          <div class="sp-row">
+            <div class="sp-row-info">
+              <span class="sp-row-label">Delete all guides</span>
+              <span class="sp-row-desc">Permanently removes everything from this device</span>
+            </div>
+            <button class="btn-danger" id="sp-delete-all" style="font-size:12px;white-space:nowrap;flex-shrink:0">Delete All</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Delete confirm modal -->
+  <div class="modal-overlay" id="delete-modal">
+    <div class="modal">
+      <h3>Delete Guide?</h3>
+      <p id="delete-modal-desc">This will permanently delete this guide and all its steps. This cannot be undone.</p>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="delete-cancel">Cancel</button>
+        <button class="btn-danger" id="delete-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script type="module" src="dashboard.js"></script>
+</body>
+</html>

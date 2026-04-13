@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Pagewalk",
+  "version": "1.0.0",
+  "description": "Privacy-first step-by-step guide recorder — all data stays local in your browser",
+  "permissions": ["activeTab", "scripting", "storage", "unlimitedStorage", "tabs", "sidePanel", "webNavigation"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_icon": {
+      "16": "assets/icons/icon16.png",
+      "48": "assets/icons/icon48.png",
+      "128": "assets/icons/icon128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+  "icons": {
+    "16": "assets/icons/icon16.png",
+    "48": "assets/icons/icon48.png",
+    "128": "assets/icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["dashboard/dashboard.html", "viewer/viewer.html", "assets/styles/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pagewalk</title>
+  <link rel="stylesheet" href="../assets/styles/shared.css">
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body class="sp-body">
+
+  <header class="sp-header">
+    <div class="sp-logo">
+      <div class="sp-logo-mark">PW</div>
+      <div class="sp-logo-text">
+        <div class="sp-brand">Pagewalk</div>
+        <div class="sp-tagline">Private guide recorder</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="sp-main">
+
+    <!-- IDLE state -->
+    <section class="sp-state sp-state-idle" id="state-idle">
+      <div class="sp-prompt">
+        <h1 class="sp-prompt-title">What would you like to capture?</h1>
+        <p class="sp-prompt-sub">Record clicks, keystrokes, and page navigation into a step-by-step guide. Everything stays on your device.</p>
+      </div>
+
+      <button class="sp-cta" id="start-btn">
+        <span class="sp-cta-dot"></span>
+        <span class="sp-cta-label">Start Capture</span>
+      </button>
+    </section>
+
+    <!-- RECORDING state -->
+    <section class="sp-state sp-state-rec hidden" id="state-rec">
+      <div class="sp-rec-card">
+        <div class="sp-rec-pulse" id="rec-pulse"></div>
+        <div class="sp-rec-info">
+          <div class="sp-rec-label" id="rec-label">Recording</div>
+          <div class="sp-rec-count"><span id="step-count">0</span> steps captured</div>
+        </div>
+      </div>
+      <div class="sp-rec-quick-actions">
+        <button class="sp-btn-quick" id="pause-btn" title="Pause capture">
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor" id="pause-icon"><rect x="5" y="4" width="3.5" height="12" rx="0.8"/><rect x="11.5" y="4" width="3.5" height="12" rx="0.8"/></svg>
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor" id="resume-icon" style="display:none"><path d="M5 3.5l12 6.5-12 6.5V3.5z"/></svg>
+          <span id="pause-label">Pause</span>
+        </button>
+        <button class="sp-btn-quick" id="capture-btn" title="Take a screenshot of the current page">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h3l1.5-2h3L13 6h3a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5v-7A1.5 1.5 0 0 1 4 6z"/><circle cx="10" cy="11" r="3"/></svg>
+          <span>Screenshot</span>
+        </button>
+      </div>
+      <div class="sp-rec-actions">
+        <button class="sp-btn-secondary" id="discard-btn">Discard</button>
+        <button class="sp-btn-primary" id="stop-btn">Complete</button>
+      </div>
+
+      <!-- Live step feed (Tango-style) -->
+      <div class="sp-feed-head">
+        <span class="sp-feed-title">Captured steps</span>
+      </div>
+      <div class="sp-feed" id="step-feed">
+        <div class="sp-feed-empty" id="feed-empty">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <div>Waiting for your first click…</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Recent guides -->
+    <section class="sp-recent">
+      <div class="sp-recent-head">
+        <h2 class="sp-recent-title">Recent guides</h2>
+        <button class="sp-link-btn" id="view-all-btn">View all</button>
+      </div>
+      <div class="sp-recent-list" id="recent-list">
+        <div class="sp-empty" id="recent-empty">
+          <div class="sp-empty-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="14" rx="2"/>
+              <path d="M7 21h10M12 17v4"/>
+            </svg>
+          </div>
+          <div>No guides yet. Start your first capture.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="sp-footer">
+    <button class="sp-footer-btn" id="dashboard-btn">
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg>
+      Dashboard
+    </button>
+    <button class="sp-footer-btn" id="settings-btn">
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="2.5"/><path d="M16.5 10a6.5 6.5 0 0 0-.1-1.1l1.8-1.4-2-3.4-2.1.8a6.6 6.6 0 0 0-1.9-1.1L11.8 1.5h-4L7.5 3.8a6.6 6.6 0 0 0-1.9 1.1l-2.1-.8-2 3.4L3.3 8.9a6.5 6.5 0 0 0 0 2.2L1.5 12.5l2 3.4 2.1-.8a6.6 6.6 0 0 0 1.9 1.1l.3 2.3h4l.3-2.3a6.6 6.6 0 0 0 1.9-1.1l2.1.8 2-3.4-1.8-1.4c.07-.36.1-.73.1-1.1z"/></svg>
+      Settings
+    </button>
+  </footer>
+
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>
