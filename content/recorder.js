@@ -10,6 +10,15 @@
   if (window.__pagewalkRecorderActive) return;
   window.__pagewalkRecorderActive = true;
 
+  // TEMP instrumentation — toggle off to silence page-console capture logs.
+  const PW_DEBUG_CAPTURE = false;
+  const _pwT0 = Date.now();
+  function pwLog(tag, data) {
+    if (!PW_DEBUG_CAPTURE) return;
+    const t = ((Date.now() - _pwT0) / 1000).toFixed(3);
+    console.log(`[pw+${t}s] ${tag}`, data || '');
+  }
+
   // ─── State ──────────────────────────────────────────────────────────────
   let tearingDown   = false;
   let paused        = false;
@@ -19,6 +28,10 @@
   let widgetPauseBtn = null;
   let widgetStatusDot = null;
   let widgetStatusLabel = null;
+
+  // Page-settle watcher state (for post-load screenshot signalling)
+  let _settleTimer    = null;
+  let _settleObserver = null;
 
   // Per-element debounced keystroke buffers. key = element reference
   const keystrokeBuffers = new WeakMap();
@@ -54,6 +67,9 @@
     // Ignore clicks on our shadow host
     if (event.target === widgetHost || (widgetHost && event.composedPath && event.composedPath().includes(widgetHost))) return;
 
+    // Native click fired — cancel any pending synthesis from mousedown.
+    if (typeof clearPendingDown === 'function') clearPendingDown();
+
     // Walk up to the nearest interactive ancestor so we target the button,
     // not a span inside it.
     const targetEl = event.target.closest(INTERACTIVE_SELECTORS) || event.target;
@@ -67,6 +83,7 @@
 
     flashHighlight(targetEl);
 
+    pwLog('click detected', { desc: description?.slice?.(0, 60), x: event.clientX, y: event.clientY });
     chrome.runtime.sendMessage({
       type: 'CLICK_DETECTED',
       description,
@@ -88,9 +105,233 @@
       targetAttrs:    targetMeta.attrs,
       targetTag:      targetMeta.tag,
     }).catch(() => {});
+
+    // After sending the click, watch for the DOM to settle so the SW
+    // knows when to take the post-load screenshot (SPA route changes).
+    startPageSettleWatcher();
   }
 
+  // ─── Page-settle watcher ─────────────────────────────────────────────────
+  // Sends PAGE_SETTLED to the SW once the DOM stops mutating after a click.
+  // On traditional navigations this script is destroyed before it can fire,
+  // which is the correct signal — the SW aborts via webNavigation.onCommitted.
+  function startPageSettleWatcher() {
+    if (_settleTimer)    { clearTimeout(_settleTimer);       _settleTimer = null; }
+    if (_settleObserver) { _settleObserver.disconnect(); _settleObserver = null; }
+
+    let fired = false;
+
+    function signal() {
+      if (fired || tearingDown) return;
+      fired = true;
+      if (_settleTimer)    { clearTimeout(_settleTimer);       _settleTimer = null; }
+      if (_settleObserver) { _settleObserver.disconnect(); _settleObserver = null; }
+      chrome.runtime.sendMessage({ type: 'PAGE_SETTLED' }).catch(() => {});
+    }
+
+    // Safety net: fire after 5 s even if the DOM keeps mutating
+    _settleTimer = setTimeout(signal, 5000);
+
+    function startObserving() {
+      let quietTimer = null;
+      _settleObserver = new MutationObserver(() => {
+        clearTimeout(quietTimer);
+        quietTimer = setTimeout(signal, 500);
+      });
+      _settleObserver.observe(document.body || document.documentElement, {
+        childList: true, subtree: true, characterData: true,
+      });
+      // Fire immediately if the DOM is already quiet
+      quietTimer = setTimeout(signal, 500);
+    }
+
+    if (document.readyState === 'complete') {
+      startObserving();
+    } else {
+      document.addEventListener('readystatechange', function onReady() {
+        if (document.readyState === 'complete') {
+          document.removeEventListener('readystatechange', onReady);
+          startObserving();
+        }
+      });
+    }
+  }
+
+  // ─── Mousedown listener — fires before any click handlers ──────────────
+  // Signals the SW to take the pre-click screenshot at the earliest possible
+  // moment, before JS event handlers, focus rings, or active states change
+  // the page appearance. Also captures target metadata as a FALLBACK for
+  // sites (e.g. Coolify) that navigate on pointerdown — in those cases the
+  // original click-target element is removed from the DOM before mouseup,
+  // which causes Chrome to suppress the `click` event entirely. Without
+  // this fallback, such clicks never produce a step.
+  let _pendingDown = null;
+  let _pendingSynthTimer = null;
+  const CLICK_DRAG_THRESHOLD_PX = 8;
+  const CLICK_SYNTH_DELAY_MS = 300;
+
+  function clearPendingDown() {
+    _pendingDown = null;
+    if (_pendingSynthTimer) {
+      clearTimeout(_pendingSynthTimer);
+      _pendingSynthTimer = null;
+    }
+  }
+
+  function onMousedown(event) {
+    if (tearingDown || paused) return;
+    if (event.button !== 0) return;
+    if (event.target?.closest?.('[data-pagewalk]')) return;
+    if (event.target === widgetHost || (widgetHost && event.composedPath?.().includes(widgetHost))) return;
+
+    pwLog('mousedown', { tag: event.target?.tagName, cls: String(event.target?.className || '').slice(0, 40) });
+
+    // Capture target metadata NOW, while the element is still in the DOM.
+    // If a sync pointerdown handler on the page then removes/replaces this
+    // element, we can still synthesize a click from this stashed data.
+    try {
+      const targetEl = event.target.closest(INTERACTIVE_SELECTORS) || event.target;
+      const rect = targetEl.getBoundingClientRect();
+      const targetMeta = captureTargetMetadata(targetEl);
+      _pendingDown = {
+        description: getElementDescription(event.target),
+        clickX: event.clientX, clickY: event.clientY,
+        downX: event.clientX, downY: event.clientY,
+        rect,
+        targetMeta,
+        pageUrl: location.href,
+        pageTitle: document.title,
+        devicePixelRatio: window.devicePixelRatio || 1,
+        interactiveEl: event.target.closest(INPUT_SELECTORS) || null,
+        ts: Date.now(),
+      };
+    } catch (_) {
+      _pendingDown = null;
+    }
+
+    hideWidgetForCapture('MOUSEDOWN_CAPTURE');
+  }
+
+  // Fires after mouseup when the browser dispatches click normally.
+  // Cancels the synthesis fallback — the real click handler (onCapture)
+  // will produce the step using fresh event data.
+  function onPointerupForSynth(event) {
+    if (!_pendingDown) return;
+    if (event.button !== 0) return;
+    const dx = event.clientX - _pendingDown.downX;
+    const dy = event.clientY - _pendingDown.downY;
+    if (Math.hypot(dx, dy) > CLICK_DRAG_THRESHOLD_PX) {
+      // Pointer moved too far — treat as drag, NOT a click. Abort synthesis.
+      pwLog('pointerup drag — abort synth', { dx, dy });
+      clearPendingDown();
+      return;
+    }
+    // Arm the synthesis timer. If a real `click` event arrives first, it
+    // calls clearPendingDown() via onCapture. Otherwise we synthesize.
+    if (_pendingSynthTimer) clearTimeout(_pendingSynthTimer);
+    _pendingSynthTimer = setTimeout(() => {
+      if (!_pendingDown) return;
+      const d = _pendingDown;
+      _pendingDown = null;
+      _pendingSynthTimer = null;
+      pwLog('synth click (no native click fired)', { desc: d.description?.slice?.(0, 60) });
+      chrome.runtime.sendMessage({
+        type: 'CLICK_DETECTED',
+        description: d.description,
+        clickX: Math.round(d.clickX),
+        clickY: Math.round(d.clickY),
+        elementRect: d.rect ? {
+          top: Math.round(d.rect.top),
+          left: Math.round(d.rect.left),
+          width: Math.round(d.rect.width),
+          height: Math.round(d.rect.height),
+        } : null,
+        pageUrl: d.pageUrl,
+        pageTitle: d.pageTitle,
+        devicePixelRatio: d.devicePixelRatio,
+        targetSelector: d.targetMeta.selector,
+        targetXPath:    d.targetMeta.xpath,
+        targetText:     d.targetMeta.text,
+        targetAttrs:    d.targetMeta.attrs,
+        targetTag:      d.targetMeta.tag,
+        synthesized:    true,
+      }).catch(() => {});
+      lastClickedElement = d.interactiveEl;
+      startPageSettleWatcher();
+    }, CLICK_SYNTH_DELAY_MS);
+  }
+
+  document.addEventListener('pointerup', onPointerupForSynth, { capture: true, passive: true });
+
+  // Hide the widget, wait for the compositor to paint the hidden state,
+  // THEN ask the SW to capture. Without the double-rAF, Chrome can sample
+  // captureVisibleTab from a frame that was rasterized before the
+  // visibility:hidden change landed, leaving the widget in the screenshot.
+  //
+  // Restore is DEBOUNCED so rapid-fire proactive-hover captures don't strobe
+  // the widget visible → hidden → visible every 900 ms. The widget stays
+  // hidden during a burst of captures and only fades back in once the user
+  // stops hovering over interactive elements for WIDGET_RESTORE_DELAY_MS.
+  let _widgetRestoreTimer = null;
+  const WIDGET_RESTORE_DELAY_MS = 400;
+  const WIDGET_OFFSCREEN_TRANSFORM = 'translate(-99999px, -99999px)';
+  function hideWidgetForCapture(messageType) {
+    if (_widgetRestoreTimer) {
+      clearTimeout(_widgetRestoreTimer);
+      _widgetRestoreTimer = null;
+    }
+    // Translate the widget off-screen instead of visibility:hidden.
+    // `visibility: hidden` leaves the element on its existing compositor
+    // layer, and Chrome can serve a stale cached raster for that layer to
+    // captureVisibleTab — so the widget still appears in the screenshot.
+    // A transform moves the widget outside the viewport entirely; the
+    // capture API only reads the visible viewport, so the widget is
+    // guaranteed absent from the frame regardless of layer caching.
+    if (widgetHost) widgetHost.style.transform = WIDGET_OFFSCREEN_TRANSFORM;
+    const fire = () => {
+      chrome.runtime.sendMessage({ type: messageType })
+        .catch(() => {})
+        .finally(() => {
+          if (_widgetRestoreTimer) clearTimeout(_widgetRestoreTimer);
+          _widgetRestoreTimer = setTimeout(() => {
+            if (widgetHost) widgetHost.style.transform = '';
+            _widgetRestoreTimer = null;
+          }, WIDGET_RESTORE_DELAY_MS);
+        });
+    };
+    // Two rAFs = one full paint cycle — first rAF runs before paint, second
+    // runs after the off-screen frame has been committed to the compositor.
+    requestAnimationFrame(() => requestAnimationFrame(fire));
+  }
+
+  document.addEventListener('mousedown', onMousedown, { capture: true, passive: true });
   document.addEventListener('click', onCapture, { capture: true, passive: true });
+
+  // ─── Proactive snapshot on hover ────────────────────────────────────────
+  // captureVisibleTab waits for the next compositor frame, so a capture
+  // fired on mousedown can still rasterize AFTER a SPA router (e.g.
+  // YouTube) has already swapped the DOM on mousedown itself — the click
+  // step ends up showing the destination's loading state. To beat that,
+  // we proactively snapshot while the user is merely HOVERING over an
+  // interactive element. By the time they press down, a clean pre-click
+  // frame is already cached in the SW. Throttled to respect Chrome's
+  // ~2 captures/sec rate limit on captureVisibleTab.
+  let _lastProactiveFire = 0;
+  const PROACTIVE_MIN_GAP_MS = 900;
+  function onProactiveHover(event) {
+    if (tearingDown || paused) return;
+    const t = event.target;
+    if (!t || !t.closest) return;
+    if (t.closest('[data-pagewalk]')) return;
+    if (!t.closest(INTERACTIVE_SELECTORS)) return;
+    const now = Date.now();
+    if (now - _lastProactiveFire < PROACTIVE_MIN_GAP_MS) return;
+    _lastProactiveFire = now;
+
+    pwLog('proactive hover fire', { tag: t.tagName });
+    hideWidgetForCapture('PROACTIVE_SNAPSHOT');
+  }
+  document.addEventListener('pointerover', onProactiveHover, { capture: true, passive: true });
 
   // ─── Keystroke capture ──────────────────────────────────────────────────
   // Debounce per-field so we emit one step per field (on blur / Enter / idle).
@@ -455,10 +696,11 @@
 
   function teardown() {
     tearingDown = true;
-    document.removeEventListener('click',   onCapture, { capture: true });
-    document.removeEventListener('input',   onInput,   { capture: true });
-    document.removeEventListener('blur',    onBlurOrEnter, { capture: true });
-    document.removeEventListener('keydown', onBlurOrEnter, { capture: true });
+    document.removeEventListener('mousedown', onMousedown, { capture: true });
+    document.removeEventListener('click',     onCapture,   { capture: true });
+    document.removeEventListener('input',     onInput,     { capture: true });
+    document.removeEventListener('blur',      onBlurOrEnter, { capture: true });
+    document.removeEventListener('keydown',   onBlurOrEnter, { capture: true });
     removeWidget();
     window.__pagewalkRecorderActive = false;
   }

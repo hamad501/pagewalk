@@ -12,6 +12,15 @@ const SESSION_KEY         = 'pagewalk_state';
 const GUIDE_ME_KEY        = 'pw_guideme';
 const WIDGET_HIDE_DELAY   = 60;
 
+// TEMP instrumentation — set to false to silence capture-timing logs.
+const PW_DEBUG_CAPTURE = false;
+const _pwT0 = Date.now();
+function pwLog(tag, data) {
+  if (!PW_DEBUG_CAPTURE) return;
+  const t = ((Date.now() - _pwT0) / 1000).toFixed(3);
+  console.log(`[pw+${t}s] ${tag}`, data || '');
+}
+
 // ─── Recording session state ─────────────────────────────────────────────────
 
 let state = {
@@ -28,6 +37,16 @@ let state = {
 // restored by loadState(), otherwise the loadState() race across concurrent
 // messages can leave it stuck at true and silently drop all subsequent clicks.
 let pendingCapture = false;
+
+// Pending post-load capture resolver. Resolved by PAGE_SETTLED (content
+// script, SPA) or triggerPostLoad('nav') (webNavigation.onCommitted,
+// traditional navigation). Only one pending capture at a time.
+let _postLoadResolve = null;
+
+// Screenshot taken on mousedown — used by the next CLICK_DETECTED so we
+// don't need a second captureVisibleTab call. Cleared after use or on the
+// next mousedown. { dataUrl, tabId, ts }
+let pendingPreClickShot = null;
 
 async function loadState() {
   try {
@@ -84,6 +103,25 @@ async function getSettings() {
   };
 }
 
+// Synchronous cache of jpegQuality so the pre-click capture paths
+// (mousedown + proactive hover) don't need to await getSettings() before
+// firing captureVisibleTab — every extra await widens the window for a
+// SPA router to swap the DOM before the frame is rasterized.
+let _cachedJpegQuality = SCREENSHOT_QUALITY;
+(async () => {
+  try {
+    const s = await getSettings();
+    if (typeof s.jpegQuality === 'number') _cachedJpegQuality = s.jpegQuality;
+  } catch (_) {}
+})();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.pagewalk_settings) return;
+  const next = changes.pagewalk_settings.newValue;
+  if (next && typeof next.jpegQuality === 'number') {
+    _cachedJpegQuality = next.jpegQuality;
+  }
+});
+
 // ─── Message router ──────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener(function (msg, sender, sendResponse) {
@@ -131,6 +169,13 @@ async function handleMessage(msg, sender) {
       return endGuideMe();
     case 'INSTALL_HISTORY_PATCH':
       return installHistoryPatchForSender(sender);
+    case 'MOUSEDOWN_CAPTURE':
+      return handleMousedownCapture(sender);
+    case 'PROACTIVE_SNAPSHOT':
+      return handleProactiveSnapshot(sender);
+    case 'PAGE_SETTLED':
+      triggerPostLoad('settled');
+      return { ok: true };
     case 'CLICK_DETECTED':
       return handleClickDetected(msg, sender);
     case 'MANUAL_CAPTURE':
@@ -512,9 +557,90 @@ async function handleGuideMeNavigation(tabId, newUrl) {
 
 // ─── Click + keystroke handlers ─────────────────────────────────────────────
 
+// Mousedown fires before any JS click handlers, giving us the cleanest
+// possible pre-click screenshot. We take the shot here and cache it so
+// handleClickDetected can reuse it without a second captureVisibleTab call.
+// Proactive snapshot, fired from the content script while the user HOVERS
+// over an interactive element. By the time they actually press the mouse
+// button, we already have a clean pre-click frame cached — which matters
+// because captureVisibleTab resolves on the next rastered compositor frame,
+// and some sites (YouTube, etc.) swap the DOM on mousedown itself.
+// Content-script side throttles to ~1/sec; we add a second defensive gate
+// here so a rogue page firing synthetic pointerover events can't saturate
+// Chrome's ~2-captures/sec rate limit.
+let _lastProactiveTs = 0;
+const PROACTIVE_MIN_GAP_MS = 800;
+async function handleProactiveSnapshot(sender) {
+  if (!state.recording || state.paused || pendingCapture) {
+    pwLog('PROACTIVE skip', { recording: state.recording, paused: state.paused, pendingCapture });
+    return { ok: false };
+  }
+  const tabId    = sender.tab?.id || state.tabId;
+  const windowId = sender.tab?.windowId || null;
+  if (!tabId) return { ok: false };
+  if (state.tabId && tabId !== state.tabId) return { ok: false };
+  const now = Date.now();
+  if (now - _lastProactiveTs < PROACTIVE_MIN_GAP_MS) {
+    pwLog('PROACTIVE gated', { sinceLastMs: now - _lastProactiveTs });
+    return { ok: false };
+  }
+  _lastProactiveTs = now;
+
+  const t0 = Date.now();
+  let dataUrl = null;
+  try {
+    dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
+      format: 'jpeg', quality: _cachedJpegQuality,
+    });
+    pwLog('PROACTIVE capture ok', { ms: Date.now() - t0, bytes: dataUrl?.length });
+  } catch (err) {
+    pwLog('PROACTIVE capture FAIL', { ms: Date.now() - t0, err: err.message });
+    return { ok: false };
+  }
+  if (dataUrl) pendingPreClickShot = { dataUrl, tabId, ts: Date.now() };
+  return { ok: true };
+}
+
+async function handleMousedownCapture(sender) {
+  if (!state.recording || state.paused || pendingCapture) {
+    pwLog('MOUSEDOWN skip', { recording: state.recording, paused: state.paused, pendingCapture });
+    return { ok: false };
+  }
+  const tabId    = sender.tab?.id || state.tabId;
+  const windowId = sender.tab?.windowId || null;
+  if (!tabId) return { ok: false };
+
+  // Fire captureVisibleTab IMMEDIATELY — no awaits before it. Every ms spent
+  // on sendMessage round-trips (hideWidget/redact) gives SPA routers time to
+  // swap the DOM before Chrome rasterizes the frame, which was the bug that
+  // caused click-step screenshots to show the destination page's loading
+  // state instead of the source page. Redaction is already applied
+  // persistently at startRecording; the widget is hidden synchronously on
+  // the page side in recorder.js's onMousedown before this message is sent.
+  const t0 = Date.now();
+  let dataUrl = null;
+  try {
+    dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
+      format: 'jpeg', quality: _cachedJpegQuality,
+    });
+    pwLog('MOUSEDOWN capture ok', { ms: Date.now() - t0, bytes: dataUrl?.length });
+  } catch (err) {
+    pwLog('MOUSEDOWN capture FAIL', { ms: Date.now() - t0, err: err.message });
+    console.warn('[Pagewalk SW] mousedown capture failed:', err.message);
+  }
+  pendingPreClickShot = dataUrl ? { dataUrl, tabId, ts: Date.now() } : null;
+  return { ok: true };
+}
+
 async function handleClickDetected(msg, sender) {
-  if (!state.recording || state.paused || !state.guideId) return { ok: false };
-  if (pendingCapture) return { ok: false, reason: 'busy' };
+  if (!state.recording || state.paused || !state.guideId) {
+    pwLog('CLICK ignored', { recording: state.recording, paused: state.paused, hasGuide: !!state.guideId });
+    return { ok: false };
+  }
+  if (pendingCapture) {
+    pwLog('CLICK DROPPED busy', { desc: msg.description });
+    return { ok: false, reason: 'busy' };
+  }
   const tabId    = sender.tab?.id  || state.tabId;
   const windowId = sender.tab?.windowId || null;
   if (!tabId) return { ok: false };
@@ -523,24 +649,43 @@ async function handleClickDetected(msg, sender) {
 
   try {
     const settings = await getSettings();
-    try {
-      await chrome.tabs.sendMessage(tabId, {
-        type: 'SCROLL_TO_ELEMENT', clientX: msg.clickX, clientY: msg.clickY,
-      });
-    } catch (_) {}
-    await hideWidgetInTab(tabId);
-    await delay(settings.screenshotDelay ?? SCREENSHOT_DELAY_MS);
-    await redactInTab(tabId);
+
+    // Prefer the screenshot already taken on mousedown — it was captured at
+    // the earliest possible moment (before any JS handlers ran). Fall back to
+    // taking one now if the mousedown shot is missing, stale, or from a
+    // different tab.
+    // Raised from 2 s to accommodate proactive-hover snapshots, which can
+    // legitimately be up to a few seconds old by the time the user actually
+    // clicks. A stale pre-click shot is still vastly better than a post-nav
+    // loading-spinner frame.
+    const MOUSEDOWN_SHOT_TTL = 5000;
+    const shot = pendingPreClickShot;
+    pendingPreClickShot = null;
 
     let screenshotDataUrl = null;
-    try {
-      screenshotDataUrl = await chrome.tabs.captureVisibleTab(windowId, {
-        format: 'jpeg', quality: settings.jpegQuality || SCREENSHOT_QUALITY,
+    if (shot && shot.tabId === tabId && Date.now() - shot.ts < MOUSEDOWN_SHOT_TTL) {
+      screenshotDataUrl = shot.dataUrl;
+      pwLog('CLICK reused pre-shot', { ageMs: Date.now() - shot.ts, bytes: shot.dataUrl?.length });
+    } else {
+      pwLog('CLICK fallback capture start', {
+        hasShot: !!shot,
+        shotTabMatch: shot ? shot.tabId === tabId : null,
+        shotAgeMs: shot ? Date.now() - shot.ts : null,
       });
-    } catch (err) {
-      console.warn('[Pagewalk SW] captureVisibleTab failed:', err.message);
+      const t0 = Date.now();
+      await hideWidgetInTab(tabId);
+      await redactInTab(tabId);
+      try {
+        screenshotDataUrl = await chrome.tabs.captureVisibleTab(windowId, {
+          format: 'jpeg', quality: settings.jpegQuality ?? SCREENSHOT_QUALITY,
+        });
+        pwLog('CLICK fallback capture ok', { ms: Date.now() - t0, bytes: screenshotDataUrl?.length });
+      } catch (err) {
+        pwLog('CLICK fallback capture FAIL', { ms: Date.now() - t0, err: err.message });
+        console.warn('[Pagewalk SW] pre-click captureVisibleTab failed:', err.message);
+      }
+      await unredactInTab(tabId);
     }
-    await unredactInTab(tabId);
 
     const step = await createStep(state.guideId, {
       description: msg.description || '',
@@ -561,9 +706,70 @@ async function handleClickDetected(msg, sender) {
     broadcastStepAdded(step, state.stepCount - 1);
     await showWidgetInTab(tabId, state.stepCount);
     broadcastState();
+    pwLog('CLICK step created', { stepCount: state.stepCount, hasShot: !!screenshotDataUrl });
+
+    // Schedule the post-load screenshot asynchronously — does NOT block
+    // the next click. Races PAGE_SETTLED (SPA) vs triggerPostLoad('nav')
+    // (traditional navigation) vs a 5 s safety timeout.
+    schedulePostLoadCapture(tabId, step.id);
+
     return { ok: true, stepCount: state.stepCount };
   } finally {
     pendingCapture = false;
+    pwLog('CLICK done, pendingCapture cleared');
+  }
+}
+
+function triggerPostLoad(reason) {
+  if (_postLoadResolve) {
+    const r = _postLoadResolve;
+    _postLoadResolve = null;
+    r(reason);
+  }
+}
+
+const POST_LOAD_TIMEOUT_MS = 5000;
+
+async function schedulePostLoadCapture(tabId, stepId) {
+  // Cancel any previous pending post-load (user clicked again before it fired)
+  triggerPostLoad('superseded');
+
+  const reason = await new Promise((resolve) => {
+    _postLoadResolve = resolve;
+    setTimeout(() => {
+      if (_postLoadResolve === resolve) {
+        _postLoadResolve = null;
+        resolve('timeout');
+      }
+    }, POST_LOAD_TIMEOUT_MS);
+  });
+
+  // 'nav'        — traditional navigation; nav step already captures the destination
+  // 'superseded' — a newer click came in, that one handles its own post-load
+  if (reason === 'nav' || reason === 'superseded') return;
+  if (!state.recording || !state.guideId) return;
+
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    const settings = await getSettings();
+    await hideWidgetInTab(tabId);
+    await redactInTab(tabId);
+    let shot = null;
+    try {
+      shot = await chrome.tabs.captureVisibleTab(tab.windowId, {
+        format: 'jpeg', quality: settings.jpegQuality ?? SCREENSHOT_QUALITY,
+      });
+    } catch (err) {
+      console.warn('[Pagewalk SW] post-load captureVisibleTab failed:', err.message);
+    }
+    await unredactInTab(tabId);
+    if (shot) {
+      await updateStep(stepId, { screenshotPostLoad: shot });
+    }
+    await showWidgetInTab(tabId, state.stepCount);
+  } catch (err) {
+    console.warn('[Pagewalk SW] schedulePostLoadCapture error:', err.message);
+    try { await showWidgetInTab(tabId, state.stepCount); } catch (_) {}
   }
 }
 
@@ -930,6 +1136,10 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
   if (!state.recording || state.paused || details.tabId !== state.tabId) return;
   // Ignore sub-document/history transitions that don't actually change the URL
   if (details.transitionType === 'auto_subframe' || details.transitionType === 'manual_subframe') return;
+
+  // A real navigation is underway — the nav step captures the destination,
+  // so abort any pending post-load screenshot from the preceding click.
+  triggerPostLoad('nav');
 
   // Record a navigation step. No screenshot: the next post-load load event
   // will inject the recorder which triggers the captureOnNavigation below.
