@@ -173,7 +173,7 @@ async function startRecording(tabId, title) {
     let screenshotDataUrl = null;
     if (tab) {
       try {
-        await delay(settings.screenshotDelay || SCREENSHOT_DELAY_MS);
+        await delay(settings.screenshotDelay ?? SCREENSHOT_DELAY_MS);
         screenshotDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
           format: 'jpeg', quality: settings.jpegQuality || SCREENSHOT_QUALITY,
         });
@@ -529,7 +529,7 @@ async function handleClickDetected(msg, sender) {
       });
     } catch (_) {}
     await hideWidgetInTab(tabId);
-    await delay(settings.screenshotDelay || SCREENSHOT_DELAY_MS);
+    await delay(settings.screenshotDelay ?? SCREENSHOT_DELAY_MS);
     await redactInTab(tabId);
 
     let screenshotDataUrl = null;
@@ -591,7 +591,7 @@ async function handleManualCapture(msg, sender) {
   try {
     const settings = await getSettings();
     await hideWidgetInTab(tabId);
-    await delay(settings.screenshotDelay || SCREENSHOT_DELAY_MS);
+    await delay(settings.screenshotDelay ?? SCREENSHOT_DELAY_MS);
     await redactInTab(tabId);
 
     let screenshotDataUrl = null;
@@ -663,7 +663,7 @@ async function handleKeystrokeDetected(msg, sender) {
   try {
     const settings = await getSettings();
     await hideWidgetInTab(tabId);
-    await delay(settings.screenshotDelay || SCREENSHOT_DELAY_MS);
+    await delay(settings.screenshotDelay ?? SCREENSHOT_DELAY_MS);
     await redactInTab(tabId);
 
     let screenshotDataUrl = null;
@@ -980,7 +980,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
         if (lastNav) {
           const settings = await getSettings();
           await hideWidgetInTab(tabId);
-          await delay(settings.screenshotDelay || SCREENSHOT_DELAY_MS);
+          await delay(settings.screenshotDelay ?? SCREENSHOT_DELAY_MS);
           await redactInTab(tabId);
           let shot = null;
           const tab = await chrome.tabs.get(tabId);
