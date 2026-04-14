@@ -544,8 +544,8 @@ async function loadSettingsData() {
   spDelayVal.textContent = s.screenshotDelay + 'ms';
   spQuality.value          = s.jpegQuality;
   spQualityVal.textContent = s.jpegQuality + '%';
-  spCaptureOnStart.checked = !!s.captureOnStart;
-  spShowWidget.checked     = s.showWidget !== false;
+  spCaptureOnStart.checked = s.captureOnStart !== false;
+  spShowWidget.checked     = !!s.showWidget;
   spAutoRedact.checked     = !!s.autoRedact;
   spRedactOptions.style.display = s.autoRedact ? '' : 'none';
   spRedactStyle.value = s.redactStyle || 'redact';

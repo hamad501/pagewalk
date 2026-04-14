@@ -99,7 +99,7 @@ async function getSettings() {
     screenshotDelay: SCREENSHOT_DELAY_MS,
     jpegQuality: SCREENSHOT_QUALITY,
     captureOnStart: true,
-    showWidget: true,
+    showWidget: false,
   };
 }
 
