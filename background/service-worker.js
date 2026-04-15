@@ -144,7 +144,7 @@ async function handleMessage(msg, sender) {
         guideId: state.guideId,
         stepCount: state.stepCount,
         tabId: state.tabId,
-        showWidget: s.showWidget !== false,
+        showWidget: !!s.showWidget,
       };
     }
     case 'START_RECORDING':
@@ -211,7 +211,7 @@ async function startRecording(tabId, title) {
   // first two steps. Screenshot capture and step creation are in separate
   // try blocks so a captureVisibleTab failure (rate limit, backgrounded
   // tab, etc.) doesn't prevent the step itself from being recorded.
-  if (settings.captureOnStart) {
+  if (settings.captureOnStart !== false) {
     let tab = null;
     try { tab = await chrome.tabs.get(tabId); } catch (_) {}
 
@@ -912,7 +912,7 @@ async function handleKeystrokeDetected(msg, sender) {
 
 async function showWidgetInTab(tabId, stepCount) {
   const settings = await getSettings();
-  if (settings.showWidget === false) return;
+  if (!settings.showWidget) return;
   try {
     await chrome.tabs.sendMessage(tabId, { type: 'SHOW_WIDGET', stepCount });
   } catch (_) {}

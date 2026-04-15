@@ -689,7 +689,7 @@
   try {
     chrome.runtime.sendMessage({ type: 'GET_STATE' }).then((res) => {
       if (!res || !res.recording) return;
-      if (res.showWidget !== false) showWidget(res.stepCount || 0);
+      if (res.showWidget) showWidget(res.stepCount || 0);
       if (res.paused) setPaused(true);
     }).catch(() => {});
   } catch (_) {}
